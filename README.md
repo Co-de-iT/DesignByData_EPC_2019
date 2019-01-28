@@ -1,2 +1,3 @@
-# DesignByData_EPC_2019
-Design By Data 2019 - Agent-based tectonics workshop
+# Agent-based Tectonics @ DesignByData 2019  
+  
+Codes used in the Agent-based tectonics workshop held @ Design By Data 2019 - tutor: Alessio Erioli, [Co-de-iT](www.co-de-it.com)
