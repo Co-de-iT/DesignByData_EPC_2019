@@ -64,6 +64,9 @@ public class Script_Instance : GH_ScriptInstance
 
         // align planes with field - C#
         // code by Alessio Erioli - (c) Co-de-iT 2019 
+        //  implementations:
+        //  . fixed pts and dirs (for future modularization of the process over larger number of units
+        //  . field as static set of pts and vectors (RTree searchable)
 
 
         if (P == null || P.Count == 0) return;
@@ -71,27 +74,41 @@ public class Script_Instance : GH_ScriptInstance
         if (reset || aPS == null)
         {
             // passing the essential parameters to the new simulation
-            aPS = new AgentPlaneSimulation(P, V, cNS, cNT, pR, cI, aI, sI, fI, mF);
+            aPS = new AgentPlaneSimulation(P, V);
+            //aPS = new AgentPlaneSimulation(P, V, cNS, cNT, pR, cI, aI, sI, fI, mF);
+
+            // initializing arrays for export
             gP = new GH_Plane[aPS.agentPlanes.Length];
             gM = new GH_Mesh[aPS.agentPlanes.Length];
         }
         else
         {
+            // update parameters
+            aPS.cNS = cNS;
+            aPS.cNT = cNT;
+            aPS.pR = pR;
+            aPS.cI = cI;
+            aPS.aI = aI;
+            aPS.sI = sI;
+            aPS.fI = fI;
+            aPS.mF = mF;
 
             // run simulation
             aPS.Run();
 
-            // extract planes
+            // extract output geometries and information
 
             Parallel.For(0, aPS.agentPlanes.Length, i =>
             {
+                // extract planes
                 gP[i] = new GH_Plane(aPS.agentPlanes[i].PlaneOut());
+                // extract meshes (optional)
                 //gM[i] = new GH_Mesh(aPS.agentPlanes[i].MeshOut(pR));
             });
 
 
             Planes = gP;
-            //MeshPlanes = gM;
+            // MeshPlanes = gM;
 
             if (on) Component.ExpireSolution(true); // equivalent to a timer
         }
@@ -100,19 +117,21 @@ public class Script_Instance : GH_ScriptInstance
 
     // <Custom additional code> 
 
-    // global variables for geometry output
+    // ............................................................ global variables 
+    // declaring global variables for geometry output
     public GH_Plane[] gP;
     public GH_Mesh[] gM;
-
     public AgentPlaneSimulation aPS;
 
+    // .................................................................... classes 
     // .............................................................................
-    // ............................. classes .......................................
     // .............................................................................
 
-    // .............................................................................
-    // ............................. Simulation ....................................
-    // .............................................................................
+
+
+    // ...................................................... Simulation ..........
+    // ............................................................................
+    // ............................................................................
 
     public class AgentPlaneSimulation
     {
@@ -153,6 +172,18 @@ public class Script_Instance : GH_ScriptInstance
 
         }
 
+        public AgentPlaneSimulation(List<Point3d> P, List<Vector3d> V)
+        {
+            // build agent planes array
+            agentPlanes = new AgentPlane[P.Count];
+
+            Parallel.For(0, P.Count, i =>
+            {
+                agentPlanes[i] = new AgentPlane(P[i], V[i], this);
+            });
+
+        }
+
         // ..........................    methods
 
         public void Run()
@@ -161,6 +192,43 @@ public class Script_Instance : GH_ScriptInstance
         }
 
         public void UpdateAgents()
+        {
+
+            // . . . . . . . . . . environmental and stigmergic interactions
+            
+
+            // calculate field influence vector for agents
+
+            Vector3d[] curlNoiseVector = new Vector3d[agentPlanes.Length];
+
+            var p = Partitioner.Create(0, agentPlanes.Length);
+
+            Parallel.ForEach(p, (range, loopState) =>
+            {
+                for (int i = range.Item1; i < range.Item2; i++)
+                {
+                    // calculate curl noise vector
+                    CurlNoise(agentPlanes[i].O, cNS, cNT, true, out curlNoiseVector[i]);
+                    curlNoiseVector[i].Unitize();
+
+                    // this resets the acceleration (or desired direction)
+                    // in case a different update sequence is implemented
+                    // remember to reset desired before calculating the new iteration
+                    agentPlanes[i].ResetDesired();
+                    agentPlanes[i].ComputeFieldAlign(curlNoiseVector[i], fI);
+                }
+
+            });
+
+            // . . . . . . . . . . peer-to-peer interaction
+            FLockRTree();
+
+            // . . . . . . . . . . update position and direction
+            UpdateAgentsDirection();
+
+        }
+
+        public void UpdateAgents_OLD()
         {
             // calculate curl noise vector for agents
 
@@ -174,7 +242,8 @@ public class Script_Instance : GH_ScriptInstance
                 {
                     CurlNoise(agentPlanes[i].O, cNS, cNT, true, out curlNoiseVector[i]);
                     curlNoiseVector[i].Unitize();
-                    agentPlanes[i].Align(curlNoiseVector[i], mF);
+                    agentPlanes[i].ResetDesired();
+                    agentPlanes[i].AlignWithField(curlNoiseVector[i], fI);
                 }
 
             });
@@ -189,10 +258,12 @@ public class Script_Instance : GH_ScriptInstance
 
         }
 
-        public void RTreeNeighbours()
+        public void FLockRTree()
         {
-            double nR = 5f;
+            // define neighborhood radius
+            double nR = pR * 3;
 
+            // declare RTree
             RTree rTree = new RTree();
 
             // populate RTree
@@ -211,27 +282,43 @@ public class Script_Instance : GH_ScriptInstance
                     };
 
                 rTree.Search(new Sphere(agent.O, nR), rTreeCallback);
-                // implement this function:
-                // agent.ComputeDesiredVelocity(neighbours);
+
+                // compute desired vector for each agent
+                agent.ComputeDesiredNeighbours(neighbours);
             }
 
-            // implement this function
-            // UpdateAgentsDirection();
-
         }
+
+        public void UpdateAgentsDirection()
+        {
+            // here's one of my mods - update positions and velocities in parallel
+            var part = Partitioner.Create(0, agentPlanes.Length);
+            Parallel.ForEach(part, (range, loopstate) =>
+            {
+                for (int i = range.Item1; i < range.Item2; i++)
+                {
+                    // update at max Force
+                    agentPlanes[i].Update(mF);
+                }
+            });
+            //Parallel.ForEach(Agents, agent => { agent.UpdateVelocityAndPosition(); });
+            //foreach (FlockAgent agent in Agents) agent.UpdateVelocityAndPosition();
+        }
+
     }
 
 
-    // .............................................................................
-    // ................................ Agent ......................................
-    // .............................................................................
+    // ........................................................... Agent ..........
+    // ............................................................................
+    // ............................................................................
     public class AgentPlane
     {
 
         // fields
         public Point3d O;
         public Vector3d X, Y, Z;
-        public Vector3d desDir; // desired direction
+        public Vector3d desDir; // desired direction - influenced by environmental field and nearby agents' directions
+        public Vector3d desPos; // desired position - influenced by environmental movement constraints (es. surface) and neighbour agents
         public AgentPlaneSimulation agentSim;
 
         // constructor
@@ -244,15 +331,24 @@ public class Script_Instance : GH_ScriptInstance
         }
         // methods
 
-        public void ComputeDesired(List<AgentPlane> neighbours)
+        public void Update(double mF)
+        {
+            // update position
+            O += desPos * mF;
+            // update direction
+            X = X * (1- mF) + mF * desDir;
+            X.Unitize();
+
+        }
+
+        public void ResetDesired()
         {
             desDir = Vector3d.Zero;
+            desPos = Vector3d.Zero;
+        }
 
-            // ............................ Curl Noise update behavior
-            Vector3d curlDir;
-            CurlNoise(O, agentSim.cNS, agentSim.cNT, true, out curlDir);
-            curlDir.Unitize();
-            desDir += curlDir * agentSim.fI;
+        public void ComputeDesiredNeighbours(List<AgentPlane> neighbours)
+        {
 
             // neighbours interaction
             if (neighbours.Count != 0)
@@ -261,7 +357,6 @@ public class Script_Instance : GH_ScriptInstance
                 // ............................ alignment behavior
 
                 // align direction with neighbours
-
                 Vector3d align = Vector3d.Zero;
 
                 foreach (AgentPlane neighbour in neighbours)
@@ -274,20 +369,53 @@ public class Script_Instance : GH_ScriptInstance
                 desDir += agentSim.aI * align;
 
                 // ............................ cohesion behavior
+                Vector3d cohesion = Vector3d.Zero;
+                foreach (AgentPlane neighbour in neighbours)
+                    cohesion += (Vector3d)Point3d.Subtract(neighbour.O, O);
+
+                cohesion /= neighbours.Count;
+
+                // updates desired position
+                // multiplies cohesion vector by cohesion intensity factor
+                desPos += agentSim.cI * cohesion;
+
 
                 // ............................ separation behavior
+                Vector3d separation = Vector3d.Zero;
+                int sepCount = 0;
+                double sepDistSq = agentSim.pR * agentSim.pR;
+                double distSq;
+                foreach (AgentPlane neighbour in neighbours)
+                {
+                    distSq = O.DistanceToSquared(neighbour.O);
+                    if (distSq < sepDistSq)
+                    {
+                        // separation vector is bigger when closer to another agent
+                        separation += (Vector3d)Point3d.Subtract(O, neighbour.O) * (sepDistSq-distSq);
+                        sepCount++;
+                    }
+                }
+                if (sepCount > 0)
+                    separation /= sepCount;
 
-
+                // updates desired position
+                // multiplies separation vector by separation intensity factor
+                desPos += agentSim.sI * separation;
 
             }
 
         }
 
-        public void Align(Vector3d desired, double aI)
+        public void AlignWithField(Vector3d fieldVector, double fI)
         {
 
-            X = X * (1 - aI) + desired * aI;
+            X = X * (1 - fI) + fieldVector * fI;
             X.Unitize();
+        }
+
+        public void ComputeFieldAlign(Vector3d fieldVector, double fI)
+        {
+            desDir += fieldVector * fI;
         }
 
         public Plane PlaneOut()
@@ -316,14 +444,16 @@ public class Script_Instance : GH_ScriptInstance
         }
     }
 
-
+    // .................................................................. Utilities 
+    // .............................................................................
+    // 
     // .............................................................................
     // ..................... 3D Curl Noise function ................................
     // .............................................................................
 
     static void CurlNoise(Point3d P, double S, double t, bool flag, out Vector3d V)
-    // Points, scale, time, 3D, out vectors
     {
+        // . . . . . . . . Points . . scale . .  time . .  3D . . . .  out vectors
 
         float fS = (float)S;
         float fT = (float)t;
@@ -370,10 +500,6 @@ public class Script_Instance : GH_ScriptInstance
         V = val2;
 
     }
-
-    // .............................................................................
-    // ............................. Utilities .....................................
-    // .............................................................................
 
     public float Remap(float val, float from1, float to1, float from2, float to2)
     {
