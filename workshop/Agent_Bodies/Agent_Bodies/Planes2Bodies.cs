@@ -58,46 +58,51 @@ public class Script_Instance2 : GH_ScriptInstance // Script_Instance2 - name cha
     /// Output parameters as ref arguments. You don't have to assign output parameters, 
     /// they will have a default value.
     /// </summary>
-    private void RunScript(bool reset, bool go, List<Plane> Pl, List<int> id, List<Polyline> body, ref object Bodies, ref object Planes)
+    private void RunScript(bool reset, bool go, List<Plane> Pl, List<int> id, List<Polyline> body, ref object Bodies, ref object Planes, ref object TipPoints)
     {
         // <Custom code> 
 
         // . . . . . . . . . . . . . . . . . . . . . . . . return on null data
         if (Pl == null || body == null) return;
 
+        // variables for data extraction
         DataTree<Polyline> outBodies = new DataTree<Polyline>();
         GH_Plane[] outPlanes = new GH_Plane[Pl.Count];
+        List<GH_Point> tipPoints = new List<GH_Point>();
 
         // . . . . . . . . . . . . . . . . . . . . . . . . initialize system
-        if (reset || Agents == null)
+        if (reset || ABS == null)
         {
-            ABS = new AgentBodySimulation();
+            ABS = new AgentBodySimulation(Pl, body);
+        }
 
-            Agents = new AgentBody[Pl.Count];
+        Print("{0}", ABS.Agents[0].Neighbours.Count);
+        Print(Status);
 
-            // . . . . . . . . . . . . . . . . . . . . . . . . build agents array
-
-            for (int i = 0; i < Pl.Count; i++)
-                Agents[i] = new AgentBody(Pl[i], body);
-
+        if (go)
+        {
+            ABS.Run();
+            Component.ExpireSolution(true);
         }
 
 
         // . . . . . . . . . . . . . . . . . . . . . . . . extract geometries and data
 
-        for (int i = 0; i < Agents.Length; i++)
-            outBodies.EnsurePath(new GH_Path(i));
+        // necessary only in case of parallelization
+        //for (int i = 0; i < ABS.Agents.Length; i++)
+        //    outBodies.EnsurePath(new GH_Path(i));
 
-        List<Polyline> arms;
-        for (int i = 0; i < Agents.Length; i++)
+        for (int i = 0; i < ABS.Agents.Length; i++)
         {
-            arms = Agents[i].ExtractBody();
-            outBodies.AddRange(arms, new GH_Path(i));
-            outPlanes[i] = new GH_Plane(Agents[i].agentPlane);
+            outBodies.AddRange(ABS.Agents[i].ExtractBody(), new GH_Path(i));
+            outPlanes[i] = new GH_Plane(ABS.Agents[i].agentPlane);
+            for (int j = 0; j < ABS.Agents[i].body.Tips.Count; j++)
+                tipPoints.Add(new GH_Point(ABS.Agents[i].body.Tips[j].pos));
         }
 
         Bodies = outBodies;
         Planes = outPlanes;
+        TipPoints = tipPoints;
         // </Custom code> 
     }
 
@@ -105,57 +110,158 @@ public class Script_Instance2 : GH_ScriptInstance // Script_Instance2 - name cha
 
     // global variables
     public AgentBodySimulation ABS;
-    public AgentBody[] Agents;
+    public static string Status = ""; // for debugging
 
+    // .................................................................... classes 
+    // .............................................................................
+    // .............................................................................
+
+    // ...................................................... Simulation ..........
+    // ............................................................................
+    // ............................................................................
     public class AgentBodySimulation
     {
         public AgentBody[] Agents;
+        RTree agentsRTree;
+        public double searchRadius;
 
         public AgentBodySimulation(List<Plane> Pl, List<Polyline> body)
         {
             Agents = new AgentBody[Pl.Count];
+            agentsRTree = new RTree();
+            searchRadius =  0.5f; // this can be later externalized as a parameter
 
-            // . . . . . . . . . . . . . . . . . . . . . . . . build agents array
+            // . . . . . . . . . . . . . . . . . . . . . . . . build agents array & RTree
+            // since agents are fixed it can be built in advance
             for (int i = 0; i < Pl.Count; i++)
+            {
                 Agents[i] = new AgentBody(Pl[i], body);
+                agentsRTree.Insert(Agents[i].agentPlane.Origin, i);
+            }
+
+            // . . . . . . . . . . . . . . . . . . . . . . . . . . . build neighbours map
+            FindNeighbours(searchRadius);
         }
 
         public AgentBodySimulation() { }
+
+        public void Run()
+        {
+            // foreach (AgentBody ab in Agents)
+            Parallel.ForEach(Agents, ab =>
+            {
+                ab.Update();
+            });
+
+            // call tips UpdatePosition
+            Parallel.ForEach(Agents, ab =>
+            {
+                foreach (Tip t in ab.body.Tips) t.UpdatePosition();
+            });
+
+            // rebuild bodies
+            Parallel.ForEach(Agents, ab =>
+            {
+                ab.RebuildBody();
+            });
+        }
+
+        public void FindNeighbours(double searchRadius)
+        {
+
+            foreach (AgentBody ab in Agents)
+            {
+                EventHandler<RTreeEventArgs> rTreeCallback = (object sender, RTreeEventArgs args) =>
+                {
+                    if (Agents[args.Id] != ab)
+                        ab.Neighbours.Add(Agents[args.Id]);
+
+                };
+
+                agentsRTree.Search(new Sphere(ab.body.O, searchRadius), rTreeCallback);
+            }
+        }
     }
+
+    // ...................................................... Agent Body ..........
+    // ............................................................................
+    // ............................................................................
 
     public class AgentBody
     {
         public Plane agentPlane;
-        public Body agentBody;
-
+        public Body body;
+        public List<AgentBody> Neighbours;
+        public AgentBodySimulation ABS;
 
         public AgentBody(Plane agentPlane, List<Polyline> polylines)
         {
+            // define agent body and orient it
             this.agentPlane = agentPlane;
-            agentBody = new Body(polylines);
+            body = new Body(polylines);
             OrientBody(Plane.WorldXY, this.agentPlane);
+
+            Neighbours = new List<AgentBody>(); // this list will be filled later by the simulation
         }
 
         public void OrientBody(Plane oldPlane, Plane newPlane)
         {
             var x = Transform.PlaneToPlane(oldPlane, newPlane);
 
-            for (int i = 0; i < agentBody.Arms.Count; i++)
-                agentBody.Arms[i].Transform(x);
+            body.O.Transform(x);
+
+            for (int i = 0; i < body.Arms.Count; i++)
+                body.Arms[i].Transform(x);
+
+            for (int i = 0; i < body.Tips.Count; i++)
+                body.Tips[i].pos.Transform(x);
+        }
+
+        public void RebuildBody()
+        {
+            for(int i=0; i< body.Arms.Count; i++)
+            {
+                body.Arms[i][body.Arms[i].Count - 1] = body.Tips[i].pos;
+            }
+
+        }
+
+        public void Update()
+        {
+            TipsCohesion();
+        }
+
+        public void TipsCohesion()
+        {
+            List<Tip> nearTips = new List<Tip>();
+
+            // search neighbour agents and add tips to neighbours tips list (do it at every iteration since tips can move)
+            foreach (AgentBody nearAg in Neighbours)
+                nearTips.AddRange(nearAg.body.Tips);
+
+            // call tips ComputeDesired
+            foreach (Tip t in body.Tips) t.ComputeDesired(nearTips);
+        }
+
+        public void UpdateArms()
+        {
+
         }
 
         public List<Polyline> ExtractBody()
         {
-            return agentBody.Arms;
+            return body.Arms;
         }
 
     }
 
-    // . . . . . . . . . . . . . . . body class
+    // ............................................................ Body ..........
+    // ............................................................................
+    // ............................................................................
     public class Body
     {
         public List<Polyline> Arms;
-        public List<Point3d> Tips;
+        public List<Tip> Tips;
         public Point3d O;
         public Body(List<Polyline> polylines)
         {
@@ -170,10 +276,104 @@ public class Script_Instance2 : GH_ScriptInstance // Script_Instance2 - name cha
 
             O = Arms[0][0];
 
-            Tips = new List<Point3d>();
+            Tips = new List<Tip>();
             foreach (Polyline arm in Arms)
-                Tips.Add(arm[arm.Count - 1]);
+                Tips.Add(new Tip(this, arm[arm.Count - 1]));
         }
+    }
+
+    // ............................................................. Tip ..........
+    // ............................................................................
+    // ............................................................................
+    public class Tip
+    {
+        public Body body;
+        public Point3d pos;
+        public Vector3d desired;
+        public double cR;
+        public double cI;
+        public double angleOfVis;
+
+        public Tip(Body body, Point3d pos, double cR, double cI, double angleOfVis)
+        {
+            this.body = body;
+            this.pos = pos;
+            this.cR = cR;
+            this.cI = cI;
+            this.angleOfVis = angleOfVis;
+            desired = Vector3d.Zero;
+        }
+
+        // constructor chaining example
+        public Tip(Body body, Point3d pos) : this(body, pos, 0.5f, 0.01f, Math.PI * 0.5) { }
+
+        public void ComputeDesired(List<Tip> neighbourTips)
+        {
+            // reset desired vector
+            desired = Vector3d.Zero;
+            // if neighbour tips list is zero or null return
+            if (neighbourTips == null || neighbourTips.Count == 0) return;
+
+            Vector3d cohesion = Vector3d.Zero;
+            double nTipCount = 0.0;
+            double distSq, angle;
+            Vector3d toTip, toNTip;
+            // search neighbour tips list
+            foreach (Tip nTip in neighbourTips)
+            {
+                distSq = pos.DistanceToSquared(nTip.pos);
+                //  if tip in radius 
+                if (distSq < cR)
+                {
+                    //   then if tip in angle of vision
+                    toTip = pos - body.O;
+                    toNTip = nTip.pos - body.O;
+                    angle = Vector3d.VectorAngle(toTip, toNTip);
+                    if (angle < angleOfVis)
+                    {
+                        //     add to cohesion vector and increase counter
+                        cohesion += toNTip;
+                        nTipCount++;
+                    }
+                }
+            }
+            // if found tips number > 0
+            if (nTipCount > 0)
+            {
+                // average cohesion vector
+                cohesion /= nTipCount;
+                // desired is cohesion
+                desired = cohesion;
+            }
+
+        }
+
+        public void UpdatePosition()
+        {
+            pos += desired * cI;
+            // limit tip position to a max reach
+            Vector3d toTip = pos - body.O;
+            if (toTip.SquareLength > 1f)
+            {
+                toTip = Limit(toTip, 1f);
+                pos = body.O + toTip;
+            }
+        }
+    }
+
+    // .................................................................. Utilities 
+    // .............................................................................
+
+    public static Vector3d Limit(Vector3d v, double length)
+    {
+        Vector3d rv = new Vector3d(v);
+        double len = rv.Length;
+        if (len > length)
+        {
+            rv.Unitize();
+            rv *= length;
+        }
+        return rv;
     }
 
     // </Custom additional code> 
