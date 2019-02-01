@@ -58,28 +58,32 @@ public class Script_Instance2 : GH_ScriptInstance // Script_Instance2 - name cha
     /// Output parameters as ref arguments. You don't have to assign output parameters, 
     /// they will have a default value.
     /// </summary>
-    private void RunScript(List<Plane> Pl, List<int> id, List<Polyline> body, ref object Bodies, ref object Planes)
+    private void RunScript(bool reset, bool go, List<Plane> Pl, List<int> id, List<Polyline> body, ref object Bodies, ref object Planes)
     {
         // <Custom code> 
 
-        if (Pl == null) return;
+        // . . . . . . . . . . . . . . . . . . . . . . . . return on null data
+        if (Pl == null || body == null) return;
 
         DataTree<Polyline> outBodies = new DataTree<Polyline>();
         GH_Plane[] outPlanes = new GH_Plane[Pl.Count];
 
-        if (Agents == null)
+        // . . . . . . . . . . . . . . . . . . . . . . . . initialize system
+        if (reset || Agents == null)
         {
+            ABS = new AgentBodySimulation();
+
             Agents = new AgentBody[Pl.Count];
 
-            // build agents array
+            // . . . . . . . . . . . . . . . . . . . . . . . . build agents array
 
             for (int i = 0; i < Pl.Count; i++)
                 Agents[i] = new AgentBody(Pl[i], body);
 
         }
 
-        
-        // extract geometries and data
+
+        // . . . . . . . . . . . . . . . . . . . . . . . . extract geometries and data
 
         for (int i = 0; i < Agents.Length; i++)
             outBodies.EnsurePath(new GH_Path(i));
@@ -100,8 +104,24 @@ public class Script_Instance2 : GH_ScriptInstance // Script_Instance2 - name cha
     // <Custom additional code> 
 
     // global variables
-    AgentBody[] Agents;
+    public AgentBodySimulation ABS;
+    public AgentBody[] Agents;
 
+    public class AgentBodySimulation
+    {
+        public AgentBody[] Agents;
+
+        public AgentBodySimulation(List<Plane> Pl, List<Polyline> body)
+        {
+            Agents = new AgentBody[Pl.Count];
+
+            // . . . . . . . . . . . . . . . . . . . . . . . . build agents array
+            for (int i = 0; i < Pl.Count; i++)
+                Agents[i] = new AgentBody(Pl[i], body);
+        }
+
+        public AgentBodySimulation() { }
+    }
 
     public class AgentBody
     {
@@ -120,14 +140,8 @@ public class Script_Instance2 : GH_ScriptInstance // Script_Instance2 - name cha
         {
             var x = Transform.PlaneToPlane(oldPlane, newPlane);
 
-            Polyline newArm;
-
             for (int i = 0; i < agentBody.Arms.Count; i++)
-            {
-                newArm = new Polyline(agentBody.Arms[i]);
-                newArm.Transform(x);
-                agentBody.Arms[i] = newArm;
-            }
+                agentBody.Arms[i].Transform(x);
         }
 
         public List<Polyline> ExtractBody()
@@ -145,16 +159,20 @@ public class Script_Instance2 : GH_ScriptInstance // Script_Instance2 - name cha
         public Point3d O;
         public Body(List<Polyline> polylines)
         {
+            // ATTENTION - typical reference type mistake - shallow vs deep copies
+            // this is a shallow copy, so it references always the same PolyLine list!
+            //Arms = new List<Polyline>(polylines); 
 
-            Arms = new List<Polyline>(polylines);
-            //Arms.AddRange(polylines);
+            // this makes a deep copy - CORRECT
+            Arms = new List<Polyline>();
+            foreach (Polyline p in polylines)
+                Arms.Add(p.Duplicate());
+
             O = Arms[0][0];
 
             Tips = new List<Point3d>();
-            foreach (Polyline p in Arms)
-            {
-                Tips.Add(p[p.Count - 1]);
-            }
+            foreach (Polyline arm in Arms)
+                Tips.Add(arm[arm.Count - 1]);
         }
     }
 
