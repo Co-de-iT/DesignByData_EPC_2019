@@ -54,15 +54,175 @@ public class Script_Instance : GH_ScriptInstance
     /// Output parameters as ref arguments. You don't have to assign output parameters, 
     /// they will have a default value.
     /// </summary>
-    private void RunScript(object x, object y, ref object A)
+    private void RunScript(bool reset, bool go, List<Point3d> P, List<Vector3d> V, double nR, double cS, ref object Ap, ref object Av)
     {
         // <Custom code>
+
+        GH_Point[] ptsOut;
+        GH_Vector[] vecOut;
+
+        if (reset || Flock == null)
+        {
+            Flock = new FlockSystem(P, V);
+            //ptsOut = new GH_Point[Flock.Agents.Count];
+            //vecOut = new GH_Vector[Flock.Agents.Count];
+        }
+
+        if (go)
+        {
+            // update parameters
+            Flock.NeighborhoodRadius = nR;
+            Flock.CohesionStrength = cS;
+
+            // update system
+            Flock.Update();
+            Component.ExpireSolution(true);
+        }
+
+        Flock.GetPtsVecs(out ptsOut, out vecOut);
+
+        Ap = ptsOut;
+        Av = vecOut;
 
         // </Custom code>
     }
 
     // <Custom additional code> 
-    // token code for export
+
+    // global variables
+    public FlockSystem Flock;
+
+
+    // classes
+
+    public class FlockSystem
+    {
+        public List<Agent> Agents;
+        public double NeighborhoodRadius;
+        public double CohesionStrength;
+
+        public FlockSystem(List <Point3d> P, List<Vector3d> V)
+        {
+            Agents = new List<Agent>();
+
+            for (int i=0; i< P.Count; i++)
+            {
+                Agent ag = new Agent(P[i], V[i]);
+                ag.Flock = this;
+
+                Agents.Add(ag);
+            }
+        }
+
+        public void Update()
+        {
+            // . . . . . . . . . . . . . . . . . . . . . . step 1 - calculate desired
+
+            foreach (Agent ag in Agents)
+            {
+                // find neighbours & compute desired velocity for each agent
+                ComputeAgentDesiredVelocity(ag);
+            }
+
+            // . . . . . . . . . . . . . . . . . . . . . . step 2 - update agents velocity and position
+            foreach (Agent ag in Agents) ag.UpdateVelocityAndPosition();
+        }
+
+        public List<Agent> FindNeighbours(Agent ag)
+        {
+            List<Agent> neighbours = new List<Agent>();
+
+            foreach(Agent neighbour in Agents)
+            {
+                if (neighbour != ag && neighbour.position.DistanceTo(ag.position) < NeighborhoodRadius)
+                    neighbours.Add(neighbour);
+            }
+
+            return neighbours;
+        }
+
+        public void ComputeAgentDesiredVelocity(Agent ag)
+        {
+            List<Agent> neighbours = FindNeighbours(ag);
+            ag.ComputeDesiredVelocity(neighbours);
+        }
+
+        // extract points and vectors for output
+        public void GetPtsVecs(out GH_Point[] pts, out GH_Vector[] vecs)
+        {
+            pts = new GH_Point[Agents.Count];
+            vecs = new GH_Vector[Agents.Count];
+
+            for (int i = 0; i < Agents.Count; i++)
+            {
+                pts[i] = new GH_Point(Agents[i].position);
+                vecs[i] = new GH_Vector(Agents[i].velocity);
+            }
+        }
+
+    }
+
+    public class Agent
+    {
+        // field
+        public Point3d position;
+        public Vector3d velocity;
+        public Vector3d desiredVelocity;
+        public FlockSystem Flock;
+
+        // constructor
+        public Agent(Point3d position, Vector3d velocity)
+        {
+            this.position = position;
+            this.velocity = velocity;
+            desiredVelocity = this.velocity;
+        }
+
+        // methods
+        public void ComputeDesiredVelocity(List<Agent> neighbours)
+        {
+
+
+            if (neighbours.Count == 0)
+                desiredVelocity = velocity;
+            else
+            {
+                // find neighbours average
+                Point3d average = new Point3d();
+
+                foreach (Agent neighbour in neighbours)
+                    average += neighbour.position;
+
+                average /= neighbours.Count;
+
+                // go there
+                Vector3d cohesion = average - position;
+
+                desiredVelocity += Flock.CohesionStrength * cohesion;
+
+            }
+        }
+
+        public void UpdateVelocityAndPosition()
+        {
+            // steering method
+            velocity = 0.97 * velocity + 0.03 * desiredVelocity;
+
+            // limit the velocity to maximum speed (4.0)
+            if (velocity.Length > 4.0)
+            {
+                velocity.Unitize();
+                velocity *= 4.0;
+            }
+
+            position += velocity;
+        }
+
+    }
+
+    // utilities functions
+
+
     // </Custom additional code> 
 
     private List<string> __err = new List<string>(); //Do not modify this list directly.
