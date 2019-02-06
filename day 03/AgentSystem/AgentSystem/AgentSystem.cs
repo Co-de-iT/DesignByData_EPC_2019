@@ -56,16 +56,18 @@ public class Script_Instance : GH_ScriptInstance
     /// Output parameters as ref arguments. You don't have to assign output parameters, 
     /// they will have a default value.
     /// </summary>
-    private void RunScript(bool reset, bool go, Mesh M, double meI, List<Point3d> P, List<Vector3d> V, double nR, double coS, double alS, double seS, double seR, ref object Ap, ref object Av)
+    private void RunScript(bool reset, bool go, Mesh M, double meI, List<Point3d> P, List<Vector3d> V, double nR, double coS, double alS, double seS, double seR, ref object Ap, ref object Av, ref object Tr)
     {
         // <Custom code>
 
         GH_Point[] ptsOut;
         GH_Vector[] vecOut;
+        Polyline[] trails;
 
-        if (reset || Flock == null)
+        if (reset || AgSys == null || MPoints == null)
         {
-            Flock = new FlockSystem(P, V);
+            AgSys = new AgentSystem(P, V);
+            MPoints = PointCloudFromMesh(M);
             //ptsOut = new GH_Point[Flock.Agents.Count];
             //vecOut = new GH_Vector[Flock.Agents.Count];
         }
@@ -73,21 +75,24 @@ public class Script_Instance : GH_ScriptInstance
         if (go)
         {
             // update parameters
-            Flock.NeighborhoodRadius = nR;
-            Flock.CohesionStrength = coS;
-            Flock.AlignmentStrength = alS;
-            Flock.SeparationStrength = seS;
-            Flock.SeparationRadius = seR;
+            AgSys.NeighborhoodRadius = nR;
+            AgSys.CohesionStrength = coS;
+            AgSys.AlignmentStrength = alS;
+            AgSys.SeparationStrength = seS;
+            AgSys.SeparationRadius = seR;
+            AgSys.MeshIntensity = meI;
 
             // update system
-            Flock.Update();
+            AgSys.Update();
             Component.ExpireSolution(true);
         }
 
-        Flock.GetPtsVecs(out ptsOut, out vecOut);
+        AgSys.GetPtsVecs(out ptsOut, out vecOut);
+        trails = AgSys.GetTrails();
 
         Ap = ptsOut;
         Av = vecOut;
+        Tr = trails;
 
         // </Custom code>
     }
@@ -95,12 +100,13 @@ public class Script_Instance : GH_ScriptInstance
     // <Custom additional code> 
 
     // global variables
-    public FlockSystem Flock;
+    public AgentSystem AgSys;
+    public static PointCloud MPoints;
 
 
     // classes
 
-    public class FlockSystem
+    public class AgentSystem
     {
         public List<Agent> Agents;
         public double NeighborhoodRadius;
@@ -111,12 +117,13 @@ public class Script_Instance : GH_ScriptInstance
         public double MaxSpeed;
         public double BoundingBoxSize;
         public double ContainmentStrength;
+        public double MeshIntensity;
 
-        public FlockSystem(List <Point3d> P, List<Vector3d> V)
+        public AgentSystem(List<Point3d> P, List<Vector3d> V)
         {
             Agents = new List<Agent>();
 
-            for (int i=0; i< P.Count; i++)
+            for (int i = 0; i < P.Count; i++)
             {
                 Agent ag = new Agent(P[i], V[i]);
                 ag.Flock = this;
@@ -138,7 +145,7 @@ public class Script_Instance : GH_ScriptInstance
             (param a, param b, ....) => {...}
              
              */
-            Parallel.ForEach(Agents, ag => 
+            Parallel.ForEach(Agents, ag =>
             {
                 // find neighbours & compute desired velocity for each agent
                 ComputeAgentDesiredVelocity(ag);
@@ -158,7 +165,7 @@ public class Script_Instance : GH_ScriptInstance
         {
             List<Agent> neighbours = new List<Agent>();
 
-            foreach(Agent neighbour in Agents)
+            foreach (Agent neighbour in Agents)
             {
                 if (neighbour != ag && neighbour.position.DistanceTo(ag.position) < NeighborhoodRadius)
                     neighbours.Add(neighbour);
@@ -186,6 +193,17 @@ public class Script_Instance : GH_ScriptInstance
             }
         }
 
+        public Polyline[] GetTrails()
+        {
+            Polyline[] trails = new Polyline[Agents.Count];
+
+            for (int i = 0; i < Agents.Count; i++)
+            {
+                trails[i] = Agents[i].trail;
+            }
+            return trails;
+        }
+
     }
 
     public class Agent
@@ -194,7 +212,8 @@ public class Script_Instance : GH_ScriptInstance
         public Point3d position;
         public Vector3d velocity;
         public Vector3d desiredVelocity;
-        public FlockSystem Flock;
+        public Polyline trail;
+        public AgentSystem Flock;
 
         // constructor
         public Agent(Point3d position, Vector3d velocity)
@@ -202,6 +221,7 @@ public class Script_Instance : GH_ScriptInstance
             this.position = position;
             this.velocity = velocity;
             desiredVelocity = this.velocity;
+            trail = new Polyline { this.position };
         }
 
         // methods
@@ -210,11 +230,9 @@ public class Script_Instance : GH_ScriptInstance
 
             desiredVelocity = Vector3d.Zero;
             // ------------------------------- CONTAINMENT -------------------------------
-            Containment();
+            //Containment();
             // ------------------------------- FLOCKING -------------------------------
-            if (neighbours.Count == 0) 
-            desiredVelocity = velocity;
-            else
+            if (neighbours.Count > 0)
             {
                 // ................................... COHESION BEHAVIOUR .....................
                 //
@@ -260,6 +278,8 @@ public class Script_Instance : GH_ScriptInstance
                 desiredVelocity += separation * Flock.SeparationStrength;
             }
 
+            // ------------------------------- POINT CLOUD BEHAVIOUR -------------------------------
+            SeekPointCloud(MPoints);
             // ------------------------------- FIELD BEHAVIOUR -------------------------------
 
             // ------------------------------- CUSTOM MOVEMENT BEHAVIOUR ---------------------
@@ -275,16 +295,41 @@ public class Script_Instance : GH_ScriptInstance
                 desiredVelocity += new Vector3d(Flock.BoundingBoxSize - position.X, 0, 0);
 
             if (position.Y < 0.0)
-                desiredVelocity += new Vector3d(0.0,-position.Y, 0.0);
+                desiredVelocity += new Vector3d(0.0, -position.Y, 0.0);
             else if (position.Y > Flock.BoundingBoxSize)
                 desiredVelocity += new Vector3d(0.0, Flock.BoundingBoxSize - position.Y, 0.0);
 
             if (position.Z < 0.0)
-                desiredVelocity += new Vector3d(0.0,0.0,-position.Z);
+                desiredVelocity += new Vector3d(0.0, 0.0, -position.Z);
             else if (position.Z > Flock.BoundingBoxSize)
-                desiredVelocity += new Vector3d(0.0,0.0,Flock.BoundingBoxSize - position.Z);
+                desiredVelocity += new Vector3d(0.0, 0.0, Flock.BoundingBoxSize - position.Z);
 
             desiredVelocity *= Flock.ContainmentStrength;
+        }
+
+        public void SeekPoint(Point3d target, double intensity)
+        {
+            Vector3d seek = target - position;
+            seek.Unitize();
+            seek *= Flock.MaxSpeed;
+
+            desiredVelocity += seek * intensity;
+        }
+
+        public void SeekPointCloud(PointCloud pc)
+        {
+            Point3d futurePos = (Point3d)(position + velocity * 3.5);
+            int pcIndex = pc.ClosestPoint(futurePos);
+            Point3d p = pc[pcIndex].Location;
+
+            SeekPoint(p, Flock.MeshIntensity);
+
+        }
+
+        public void SeekMeshClosestPt(Mesh M)
+        {
+            // M.ClosestPoint(position + velocity * 3.5)
+
         }
 
         public void UpdateVelocityAndPosition()
@@ -300,12 +345,24 @@ public class Script_Instance : GH_ScriptInstance
             }
 
             position += velocity;
+
+            trail.Add(position);
         }
 
     }
 
     // utilities functions
+    public PointCloud PointCloudFromMesh(Mesh M)
+    {
+        PointCloud pc = new PointCloud();
 
+        for (int i = 0; i < M.Vertices.Count; i++)
+        {
+            pc.Add(M.Vertices[i], M.Normals[i]);
+        }
+
+        return pc;
+    }
 
     // </Custom additional code> 
 
