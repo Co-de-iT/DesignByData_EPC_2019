@@ -9,8 +9,10 @@ using Grasshopper;
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Data;
 using Grasshopper.Kernel.Types;
-// <Custom using>
 
+// <Custom using>
+using System.Threading;
+using System.Threading.Tasks;
 // </Custom using>
 
 
@@ -54,7 +56,7 @@ public class Script_Instance : GH_ScriptInstance
     /// Output parameters as ref arguments. You don't have to assign output parameters, 
     /// they will have a default value.
     /// </summary>
-    private void RunScript(bool reset, bool go, List<Point3d> P, List<Vector3d> V, double nR, double cS, ref object Ap, ref object Av)
+    private void RunScript(bool reset, bool go, Mesh M, double meI, List<Point3d> P, List<Vector3d> V, double nR, double coS, double alS, double seS, double seR, ref object Ap, ref object Av)
     {
         // <Custom code>
 
@@ -72,7 +74,10 @@ public class Script_Instance : GH_ScriptInstance
         {
             // update parameters
             Flock.NeighborhoodRadius = nR;
-            Flock.CohesionStrength = cS;
+            Flock.CohesionStrength = coS;
+            Flock.AlignmentStrength = alS;
+            Flock.SeparationStrength = seS;
+            Flock.SeparationRadius = seR;
 
             // update system
             Flock.Update();
@@ -100,6 +105,12 @@ public class Script_Instance : GH_ScriptInstance
         public List<Agent> Agents;
         public double NeighborhoodRadius;
         public double CohesionStrength;
+        public double AlignmentStrength;
+        public double SeparationStrength;
+        public double SeparationRadius;
+        public double MaxSpeed;
+        public double BoundingBoxSize;
+        public double ContainmentStrength;
 
         public FlockSystem(List <Point3d> P, List<Vector3d> V)
         {
@@ -112,17 +123,32 @@ public class Script_Instance : GH_ScriptInstance
 
                 Agents.Add(ag);
             }
+
+            MaxSpeed = 0.3;
+            BoundingBoxSize = 30.0;
+            ContainmentStrength = 1.0;
         }
 
         public void Update()
         {
             // . . . . . . . . . . . . . . . . . . . . . . step 1 - calculate desired
+            /*
+             function(param a, param b, ....) {...}
 
-            foreach (Agent ag in Agents)
+            (param a, param b, ....) => {...}
+             
+             */
+            Parallel.ForEach(Agents, ag => 
             {
                 // find neighbours & compute desired velocity for each agent
                 ComputeAgentDesiredVelocity(ag);
-            }
+            });
+
+            //foreach (Agent ag in Agents)
+            //{
+            //    // find neighbours & compute desired velocity for each agent
+            //    ComputeAgentDesiredVelocity(ag);
+            //}
 
             // . . . . . . . . . . . . . . . . . . . . . . step 2 - update agents velocity and position
             foreach (Agent ag in Agents) ag.UpdateVelocityAndPosition();
@@ -182,11 +208,16 @@ public class Script_Instance : GH_ScriptInstance
         public void ComputeDesiredVelocity(List<Agent> neighbours)
         {
 
-
-            if (neighbours.Count == 0)
-                desiredVelocity = velocity;
+            desiredVelocity = Vector3d.Zero;
+            // ------------------------------- CONTAINMENT -------------------------------
+            Containment();
+            // ------------------------------- FLOCKING -------------------------------
+            if (neighbours.Count == 0) 
+            desiredVelocity = velocity;
             else
             {
+                // ................................... COHESION BEHAVIOUR .....................
+                //
                 // find neighbours average
                 Point3d average = new Point3d();
 
@@ -200,7 +231,60 @@ public class Script_Instance : GH_ScriptInstance
 
                 desiredVelocity += Flock.CohesionStrength * cohesion;
 
+                // ................................... ALIGNMENT BEHAVIOUR .....................
+                //
+                Vector3d alignment = Vector3d.Zero;
+
+                foreach (Agent neighbour in neighbours)
+                    alignment += neighbour.velocity;
+
+                alignment /= neighbours.Count;
+
+                desiredVelocity += alignment * Flock.AlignmentStrength;
+
+                // ................................... SEPARATION BEHAVIOUR .....................
+                //
+                Vector3d separation = Vector3d.Zero;
+
+                foreach (Agent neighbour in neighbours)
+                {
+                    double distanceToNeighbour = position.DistanceTo(neighbour.position);
+                    if (distanceToNeighbour < Flock.SeparationRadius)
+                    {
+                        Vector3d getAway = position - neighbour.position;
+                        separation += getAway /= (getAway.Length * distanceToNeighbour);
+                    }
+
+                }
+
+                desiredVelocity += separation * Flock.SeparationStrength;
             }
+
+            // ------------------------------- FIELD BEHAVIOUR -------------------------------
+
+            // ------------------------------- CUSTOM MOVEMENT BEHAVIOUR ---------------------
+        }
+
+        public void Containment()
+        {
+
+
+            if (position.X < 0.0)
+                desiredVelocity += new Vector3d(-position.X, 0.0, 0.0);
+            else if (position.X > Flock.BoundingBoxSize)
+                desiredVelocity += new Vector3d(Flock.BoundingBoxSize - position.X, 0, 0);
+
+            if (position.Y < 0.0)
+                desiredVelocity += new Vector3d(0.0,-position.Y, 0.0);
+            else if (position.Y > Flock.BoundingBoxSize)
+                desiredVelocity += new Vector3d(0.0, Flock.BoundingBoxSize - position.Y, 0.0);
+
+            if (position.Z < 0.0)
+                desiredVelocity += new Vector3d(0.0,0.0,-position.Z);
+            else if (position.Z > Flock.BoundingBoxSize)
+                desiredVelocity += new Vector3d(0.0,0.0,Flock.BoundingBoxSize - position.Z);
+
+            desiredVelocity *= Flock.ContainmentStrength;
         }
 
         public void UpdateVelocityAndPosition()
@@ -208,11 +292,11 @@ public class Script_Instance : GH_ScriptInstance
             // steering method
             velocity = 0.97 * velocity + 0.03 * desiredVelocity;
 
-            // limit the velocity to maximum speed (4.0)
-            if (velocity.Length > 4.0)
+            // limit the velocity to maximum speed (0.5)
+            if (velocity.Length > Flock.MaxSpeed)
             {
                 velocity.Unitize();
-                velocity *= 4.0;
+                velocity *= Flock.MaxSpeed;
             }
 
             position += velocity;
