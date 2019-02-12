@@ -6,9 +6,9 @@ Codes used in the Agent-based tectonics workshop held @ Design By Data 4-8 Febru
 
 Please note that this material is a compendium to the workshop, so many implied instructions, premises and cautions given during the dat-to-day development have not been included.
 
-Tools used: Rhinoceros 3D v6 (includes Grasshopper), Visual Studio 2017
+Tools used: Rhinoceros 3D v6 (includes Grasshopper), Visual Studio 2017.
 
-Directory structure is as follows.
+---
 
 ## @ references
 
@@ -29,14 +29,14 @@ Contains .gha asssemblies and .dll libraries and general purpose .gh definitions
 **Util-02_turntable.gh**
 These files are helpers to generate animation of a moving clipping plane and a turntable of one or more geometries
 
-**Util_post-processing-Dendro** - template for isosurfacing line-base network geometries. Rreading the [Dendro](https://www.food4rhino.com/app/dendro) plugin documentation is strongly suggested here
+**Util_post-processing-Dendro** - template for isosurfacing line-base network geometries. Reading the [Dendro](https://www.food4rhino.com/app/dendro) plugin documentation is strongly suggested here
 <br>
 
 
 ### @ utilities/Components
 **CurlNoise.gha** - calculates Curl Noise for a point in x,y,z - useful to generate spatial vector field data
 
-**FileToScript2.gha** - syncs the code of a C# or VB scripting component in Grasshopper with an external editor - this is an updated version for Rhino6 of FileToScript.gha, a tool written by Mateusz Zwierzicki wrapping up a code by Vicente Soler - additional code to update it for Rhino 6 by <insert name>, wrapped and recompiled as a .gha assembly by Alessio Erioli
+**FileToScript2.gha** - syncs the code of a C# or VB scripting component in Grasshopper with an external editor - this is an updated version for Rhino6 of FileToScript.gha, a tool written by Mateusz Zwierzycki wrapping up a code by Vicente Soler - additional code to update it for Rhino 6 by Daniel Fink, wrapped and recompiled as a .gha assembly by Alessio Erioli. [Original discussion on FileToScript](https://www.grasshopper3d.com/forum/topics/file-to-script-maths?groupUrl=milkbox&).
 
 **SimplexNoise.dll** - library with Simplex Noise generation functions, it can be used to embed Curl Noise calculations (which are based on Simplex Noise) in a custom C# script
 <br>
@@ -51,7 +51,7 @@ Rhino files and Grasshopper definitions for basic Mesh modeling (low poly to sub
 ---
 ## dayly progress
 
-These folders contain the daily progress of the course. When present, the *in class* folder contains the WIP files developed that day
+These folders contain the daily progress of the course. When present, the **in class** folder contains the WIP files developed that day
   
 ### day 01
 
@@ -73,7 +73,7 @@ These folders contain the daily progress of the course. When present, the *in cl
 
 **02-00_stigmergy - basic - intuition.gh** - reading and writing information in an environment - intuitive approach
 
-**CS_02_functions.gh** - functions in C#
+**CS_02_functions.gh** - functions in C#  
 **CS_03_classes.gh** - classes and objects in C#
   
   
