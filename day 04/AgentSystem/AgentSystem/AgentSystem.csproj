@@ -58,8 +58,7 @@
   <ItemGroup>
     <Compile Include="AgentSystemComponent.cs" />
     <Compile Include="AgentSystemInfo.cs" />
-    <Compile Include="AgentSystemMesh.cs" />
-    <Compile Include="FollowMesh.cs" />
+    <Compile Include="AgentSystem.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
