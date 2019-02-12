@@ -20,13 +20,13 @@ Contains .gha asssemblies and .dll libraries and general purpose .gh definitions
 
 **3Dpeople_20181116** - 3D people as meshes in 3 different resolutions
 
-**M00_Millipede FEM field.gh** - simple use of Millipede Grasshopper plugin to generate a scalar and vector field of structural information over a FEM model of a mesh surface
-**M01_Millipede graphics generator.gh** - generates and bakes geometry for 3 different diagrams of Millipede generated data
+**M00_Millipede FEM field.gh** - simple use of Millipede Grasshopper plugin to generate a scalar and vector field of structural information over a FEM model of a mesh surface  
+**M01_Millipede graphics generator.gh** - generates and bakes geometry for 3 different diagrams of Millipede generated data  
 **interpolate mesh data.gh** - interpolate scalar and vector data while performing a Catmull-Clarck subdivision of a mesh - sometimes Millipede can be slow on big geometries. This definition allows the use of a lower-resolution mesh for faster analysis and interpolate data to use on a high-res mesh
 
-**Util_Clipping plane - Turntable base.3dm**
-**Util-01_clipping plane anim.gh**
-**Util-02_turntable.gh**
+**Util_Clipping plane - Turntable base.3dm**  
+**Util-01_clipping plane anim.gh**  
+**Util-02_turntable.gh**  
 These files are helpers to generate animation of a moving clipping plane and a turntable of one or more geometries
 
 **Util_post-processing-Dendro** - template for isosurfacing line-base network geometries. Reading the [Dendro](https://www.food4rhino.com/app/dendro) plugin documentation is strongly suggested here
@@ -55,17 +55,14 @@ These folders contain the daily progress of the course. When present, the **in c
   
 ### day 01
 
-**01-00_iterative strategies - intuition.gh** - introduction to iterative strategies in Grasshopper - intuitive approach (standard compopnents + Anemone plug-in) 
-
-**01-01_environment and field - intuition.gh** - reading information from an environment/field - intuitive approach
-
-**01-02_boundary behaviors intuition.gh** - simple boundary behavior - intuitive approach
-
+**01-00_iterative strategies - intuition.gh** - introduction to iterative strategies in Grasshopper - intuitive approach (standard compopnents + Anemone plug-in)   
+**01-01_environment and field - intuition.gh** - reading information from an environment/field - intuitive approach  
+**01-02_boundary behaviors intuition.gh** - simple boundary behavior - intuitive approach  
 **01-03_environment and field - wrap - intuition.gh** - boundary wrap behavior - intuitive approach
 
 
-**CS_00_intro.gh** - introduction to C# programming in Grasshopper
-**CS_01_data 01.gh** - data types in C# - part 1
+**CS_00_intro.gh** - introduction to C# programming in Grasshopper  
+**CS_01_data 01.gh** - data types in C# - part 1  
 **CS_01_data 02.gh** - data types in C# - part 2 - loops and conditional statements
   
   
@@ -79,10 +76,8 @@ These folders contain the daily progress of the course. When present, the **in c
   
 ### day 03
 
-**CS_04_gradient descent.gh** - gradient descent example in C#
-
-**CS_05_delegates example.gh** - explanation of delegates, anonymous functions and lambda syntax in C#
-
+**CS_04_gradient descent.gh** - gradient descent example in C#  
+**CS_05_delegates example.gh** - explanation of delegates, anonymous functions and lambda syntax in C#  
 **CS_06_RTree point search.gh** - using RTree data structure in C# - simple example of nearest neighbours search
 
 **reference mesh.gh** - a reference mesh model to use in next exercises
@@ -91,10 +86,8 @@ These folders contain the daily progress of the course. When present, the **in c
 
 Visual Studio project folder for the basic Agent System setup
 
-**AgentSystemFlock.gh** - a flocking agent system based on Craig Reynolds classical rules
-
-**AgentSystemMesh.gh** - implementation of the FollowMesh behavior in the Agent System
-
+**AgentSystemFlock.gh** - a flocking agent system based on Craig Reynolds classical rules  
+**AgentSystemMesh.gh** - implementation of the FollowMesh behavior in the Agent System  
 **FollowMesh.gh** - Particle System following a mesh geometry
 
 #### day 03/CS backup files
