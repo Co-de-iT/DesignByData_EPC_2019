@@ -22,12 +22,14 @@ Contains .gha asssemblies and .dll libraries and general purpose .gh definitions
 
 **M00_Millipede FEM field.gh** - simple use of Millipede Grasshopper plugin to generate a scalar and vector field of structural information over a FEM model of a mesh surface  
 **M01_Millipede graphics generator.gh** - generates and bakes geometry for 3 different diagrams of Millipede generated data  
-**interpolate mesh data.gh** - interpolate scalar and vector data while performing a Catmull-Clarck subdivision of a mesh - sometimes Millipede can be slow on big geometries. This definition allows the use of a lower-resolution mesh for faster analysis and interpolate data to use on a high-res mesh
+*Millipede_data.ghdata* - this file is a sample of how data is passed between M00 and M01  
+**interpolate mesh data.gh** - interpolate scalar and vector data while performing a Catmull-Clark subdivision of a mesh - sometimes Millipede can be slow on big geometries. This definition allows the use of a lower-resolution mesh for faster analysis and interpolate data to use on a high-res mesh
 
 **Util_Clipping plane - Turntable base.3dm**  
 **Util-01_clipping plane anim.gh**  
 **Util-02_turntable.gh**  
-These files are helpers to generate animation of a moving clipping plane and a turntable of one or more geometries
+**Util-03_record animation.gh**  
+These files are helpers to generate, respectively: an animation of a moving clipping plane (for a model tomography), a turntable of one or more geometries, an animation of the agents from their trajectories as polylines
 
 **Util_post-processing-Dendro** - template for isosurfacing line-base network geometries. Reading the [Dendro](https://www.food4rhino.com/app/dendro) plugin documentation is strongly suggested here
 <br>
@@ -42,7 +44,8 @@ These files are helpers to generate animation of a moving clipping plane and a t
 <br>
 
 ### @ utilities/Display Modes
-Contains a bunch of customized Display Modes for Rhino 6 - they can be installed in Rhino from _Tools > Options > View > Display Modes > Import_
+Contains a bunch of customized Display Modes for Rhino 6 - they can be installed in Rhino from:  
+_Tools > Options > View > Display Modes > Import_
 <br>
 
 ### @ utilities/Mesh Modeling
