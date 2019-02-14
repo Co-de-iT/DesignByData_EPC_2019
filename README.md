@@ -10,10 +10,6 @@ Tools used: Rhinoceros 3D v6 (includes Grasshopper), Visual Studio 2017.
 
 ---
 
-## @ references
-
-Contains links to reference material for the workshop (lecture slides, code cheatsheets, tutorials, readings, etc,)
-
 ## @ utilities
 
 Contains .gha asssemblies and .dll libraries and general purpose .gh definitions used in the workshop.
