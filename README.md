@@ -10,6 +10,10 @@ Tools used: Rhinoceros 3D v6 (includes Grasshopper), Visual Studio 2017.
 
 ---
 
+## AgentSystemFinal
+
+Contains .gh files, the Visual Studio project files and .sln file for the final version of the simulation. There are 3 .gh files: basic, intermediate and full-optional. Read the enclosed **README FIRST.txt** and **changelog.txt** files for full specifications.
+
 ## @ utilities
 
 Contains .gha asssemblies and .dll libraries and general purpose .gh definitions used in the workshop.

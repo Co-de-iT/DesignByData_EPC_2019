@@ -1,0 +1,81 @@
+_ the new algorithm
+
+This is baiscally a big implementation with several changes aimed to make the process more streamlined and improve control of body placement and their density.
+
+_ inputs
+
+. reset - boolean button - resets the system
+. go - boolean toggle - starts/stops the simulation
+.. MScalar - Mesh - Mesh containing scalar field values as grayscale vertex color
+.. MVector - Mesh - Mesh containing vector field values as RGB vertex color
+.. vectorStrength - double - strength of vector field influence
+.. scalarStrength - double - strength of scalar field influence
+.. meshSeekRad - double - radius for seeking Mesh vertices neighbours
+.. meshStrength - double - strength of Mesh following behavior
+.. agPos - List<Point3d> - initial position of agents
+.. agVel - List<Vector3d> - initial velocities of agents
+.. agMaxSpeed - double - agents maximum speed (formerly set from the Agent System constructor)
+.. futPosMult - double - future position multiplier (applies to the velocity vector to find future position for neighbours sampling - formerly set from the Agent System constructor)
+.. trailSeekRad - double - radius for seeking trail points neighbours
+.. agAngVis - double - agent angle of vision when seeking trail points (in radians) - the angle of vision is HALF the range of vision (used only for trail flocking)
+.. coheStrenght - double - strength of cohesion behavior when flocking with trail points
+.. aligStrength - double - strength of alignment behavior when flocking with trail points
+.. sepaStrength - double - strength of separation behavior when flocking with trail points
+.. sepaRadius - double - separation radius when flocking with trail points (must be smaller than trailSeekRad)
+.. trailFreq - int - n. of iterations after which update the trail
+.. BodyRectangle - Rectangle3D - rectangle of approximate body size that is checked for body deposition
+
+_ outputs
+
+.. Ap - List<Point3d> - agents current position
+.. Av - List<Vector3d> - agents current velocity
+.. neigh - DataTree<Point3d> - agents neighbour points (for debug only purposes - inactive by default)
+.. Tr - List<Polyline> - agents trails as polylines
+.. BPl - List<Plane> - Body Planes - you can either use these ones directly (default choice) or generate body planes using the subdivided trails as in the previous version
+
+-----------------------------------------------------------------------
+
+_ general changes
+
+. vector and scalar fields are now inputs embedded in colored meshes* MScalar and MVector. Scalar field is stored in the MScalar as Brightness value, vector field is converted from -1 to 1 to 0-255 for each vector coordinate (ex: the X Axis vector becomes 255,127,127).
+
+. vector and scalar fields now have separate and tweakable strength influences. Default values should give a balanced output at the given scale but feel free to try them and tailor the values to your specific cases. Keep in mind that a scalar field strength value that is too high makes the agents just drone towards the brightest spot and then get stuck there, while the same for the vector field basically transforms your agents in particles just obeying the field. Search for a balance if the default valuies do not suit you.
+
+. Agent seek methods for mesh points and tensor field have been combined in a single method SeekCombined() to avoid scanning twice the same list of neighbours
+
+. Agents now flock properly with ALL trail points - all flock-related variables (for cohesion, alignment, separation) refer to flocking with trail points
+
+. Agent class trails now initialize with 2 points to avoid errors from null polylines. The first point is the initial agent position, the second point is the agent position + velocity at the beginning (optionally, the second point can be "purged" at the end of the simulation or from the output polylines, culling the point at index 1).
+
+. trails now update by frequency (every n. iterations) and not by distance.
+
+. Body Planes are tentatively deposited at trail update frequency with neighbour control**
+
+. GetNeighbours() is now a method of the AgentSystem class
+
+. other internal variables have been renamed for consistency - it should be easy to figure out which does what without listing them one by one
+
+------------
+
+_ new classes
+
+. OutputGeom: output geometries are now retrieved via a custom class OutputGeom in one single method GetAllOut() - neighbours are extracted via a separate method (only for debug purposes) which is commented by default
+
+. TrailPoint: this class acts as a container for trail points, storing position and agent velocity at that point.
+
+_ new methods
+
+. Agent.DepositPlane() - deposits new Body Planes
+
+_ new utilities functions
+
+. VectorFromColor - converts a 0-255 RGB Color into a -1 to 1 Vector3d
+
+. Map - remaps a value from a source to a target domain
+
+
+NOTES ////////////////////////////////////////////////////////
+
+*: passing data through a Mesh sounds counterintuitive and it needs a bit of explanation: GH components need to parse input data (deserializing it, while serializing data in output) from GH_ type wrappers to Rhino Types (example: from GH_Point to Point3d). This is also the reason why we output directly GH_Points instead of Point3d, making the whole process faster. When you input some data, it needs to be converted from GH_<something> to the corresponding Rhino type, and this operation takes longer the larger is the AMOUNT of items (size and type of data do not matter, only how many items have to be serialized). So, one Mesh with 20.000 vertices is processed MUCH faster than 20.000 numbers. This is the reason why scalar and vector fields are stored as Mesh Vertex colors. When they were stored as numbers (around 22.000 values each), the component couldn't go faster than 380 milliseconds per iteration, even with just 10 agents simply moving with fixed velocity. With Mesh inputs, 29 milliseconds with 200 agents and trail flocking.
+
+**: the current agent position is projected on the Mesh as the prospective origin of the body plane and a search for neighbour Body Planes is performed. If no neighbours are found the Plane is generated; if there are neighbours, the point is projected on each neighbour plane and checked against the body rectangle size. If the point is outside all neighbour rectangles, the new plane is generated.
