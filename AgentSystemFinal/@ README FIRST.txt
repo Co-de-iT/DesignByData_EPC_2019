@@ -4,7 +4,7 @@ Before you open the files, here's some explanation and recommendations.
 
 The AgentSystemFinal is not a complete rewrite of what you know but it is largely implemented and amended, culling useless functions and introducing new ones for better output. A ffew more parameters have been added to allow further tweaking and control of fine-grain aspects.
 
-You will find here two .gh files:
+You will find here three .gh files:
 
 . AgentSystemFinal_basic.gh
 This contains the basic rewritten version of the AgentSystem definition, improved and upgraded - for details, refer to the changelog.txt reported also in the definition itself.
