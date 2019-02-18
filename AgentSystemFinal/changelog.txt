@@ -35,6 +35,11 @@ _ outputs
 
 -----------------------------------------------------------------------
 
+_ custom behavior
+
+There is a CustomBehavior method in the agent, called by the AgentSystem Update() method. In there, if you whish, you can code your own behaviors (THIS IS OPTIONAL). If it is something related to the agent motion, remember to update desiredVelocity. Otherwise, make sure your variables are readable where it's needed.
+
+
 _ general changes
 
 . vector and scalar fields are now inputs embedded in colored meshes* MScalar and MVector. Scalar field is stored in the MScalar as Brightness value, vector field is converted from -1 to 1 to 0-255 for each vector coordinate (ex: the X Axis vector becomes 255,127,127).
@@ -54,6 +59,7 @@ _ general changes
 . GetNeighbours() is now a method of the AgentSystem class
 
 . other internal variables have been renamed for consistency - it should be easy to figure out which does what without listing them one by one
+
 
 ------------
 
